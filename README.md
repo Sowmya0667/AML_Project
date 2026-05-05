@@ -1,138 +1,145 @@
-# ⚖️ Legal GraphRAG
+# ⚖️ Vidhi — The Justice Engine
 
-> **A hybrid GraphRAG system that combines Neo4j knowledge graph traversal with
-> semantic vector search to enable intelligent legal research over Indian Supreme
-> Court judgments.**
+> **A hybrid Legal GraphRAG system combining a Neo4j Knowledge Graph and ChromaDB semantic search to enable intelligent, multimodal legal research over Indian Supreme Court judgments.**
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square&logo=python)](https://python.org)
+[![Streamlit](https://img.shields.io/badge/Streamlit-UI-red?style=flat-square&logo=streamlit)](https://streamlit.io)
+[![Neo4j](https://img.shields.io/badge/Neo4j-Knowledge%20Graph-green?style=flat-square&logo=neo4j)](https://neo4j.com)
+[![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20Store-orange?style=flat-square)](https://www.trychroma.com)
+[![Groq](https://img.shields.io/badge/Groq-LLM-purple?style=flat-square)](https://groq.com)
+
+---
+
+> *"Constitution is not a mere lawyers document, it is a vehicle of Life, and its spirit is always the spirit of Age."*
+> — **Dr. B.R. Ambedkar**
 
 ---
 
 ## 📋 Table of Contents
 
-1. [Project Overview](#project-overview)
-2. [System Architecture](#system-architecture)
-3. [Knowledge Graph Schema](#knowledge-graph-schema)
-4. [Project Structure](#project-structure)
-5. [Requirements](#requirements)
-6. [Setup & Installation](#setup--installation)
-7. [Data — Kaggle Dataset](#data--kaggle-dataset)
-8. [Running the System](#running-the-system)
-9. [How It Works](#how-it-works)
-10. [API Reference](#api-reference)
-11. [Example Queries](#example-queries)
-12. [Tech Stack](#tech-stack)
+1. [Project Overview](#-project-overview)
+2. [Key Features](#-key-features)
+3. [System Architecture](#-system-architecture)
+4. [Knowledge Graph Schema](#-knowledge-graph-schema)
+5. [Project Structure](#-project-structure)
+6. [Tech Stack](#-tech-stack)
+7. [Requirements](#-requirements)
+8. [Setup & Installation](#-setup--installation)
+9. [Data — Kaggle Dataset](#-data--kaggle-dataset)
+10. [Running the System](#-running-the-system)
+11. [How It Works](#-how-it-works)
+12. [API Reference](#-api-reference)
+13. [Evaluation (RAGAS)](#-evaluation-ragas)
+14. [Example Queries](#-example-queries)
 
 ---
 
-## Project Overview
+## 🏛️ Project Overview
 
-Legal research over Indian Supreme Court judgments is challenging because legal
-knowledge is both **relational** (cases cite each other, judges interpret statutes,
-doctrines evolve) and **semantic** (meaning matters as much as keywords).
+Legal research over Indian Supreme Court judgments is challenging because legal knowledge is both **relational** (cases cite each other, judges interpret statutes, doctrines evolve over time) and **semantic** (meaning matters as much as keywords).
 
-This system solves that by combining two complementary retrieval strategies:
+**Vidhi** solves this by combining two complementary retrieval strategies into one unified pipeline:
 
 | Strategy | Technology | Strength |
-|----------|-----------|---------|
+|---|---|---|
 | **Graph Traversal** | Neo4j (Cypher) | Explicit relationships: citations, statutes, judges, doctrines |
 | **Semantic Search** | ChromaDB + Sentence-Transformers | Meaning-based similarity across judgment text |
-| **Hybrid Fusion** | Reciprocal Rank Fusion (RRF) | Best of both worlds in one ranked result set |
+| **Hybrid Fusion** | Reciprocal Rank Fusion (RRF) | Best of both worlds in a single re-ranked result set |
 
-The fused results are passed to an LLM (Groq / Anthropic / OpenAI) which
-synthesises a grounded, cited legal research answer.
-
----
-
-## System Architecture
-
-```
-                        ┌──────────────────────────────────┐
-                        │          User Query               │
-                        └──────────────┬───────────────────┘
-                                       │
-                        ┌──────────────▼───────────────────┐
-                        │         Intent Detection          │
-                        │  (statute? judge? concept? free)  │
-                        └──────┬───────────────┬───────────┘
-                               │               │
-               ┌───────────────▼──┐     ┌──────▼────────────────┐
-               │  Graph Retrieval  │     │   Vector Retrieval     │
-               │  (Neo4j Cypher)   │     │   (ChromaDB cosine)    │
-               │                   │     │                        │
-               │  • by_statute()   │     │  sentence-transformers │
-               │  • by_judge()     │     │  all-MiniLM-L6-v2      │
-               │  • by_concept()   │     │  (runs locally)        │
-               │  • fulltext()     │     │                        │
-               └───────────────┬──┘     └──────┬────────────────┘
-                               │               │
-                        ┌──────▼───────────────▼───────────┐
-                        │    Reciprocal Rank Fusion (RRF)   │
-                        │   score = Σ 1 / (60 + rank_i)     │
-                        └──────────────┬───────────────────┘
-                                       │
-                        ┌──────────────▼───────────────────┐
-                        │    LLM Answer Generation          │
-                        │    (Groq / Anthropic / OpenAI)    │
-                        └──────────────┬───────────────────┘
-                                       │
-                        ┌──────────────▼───────────────────┐
-                        │  LegalResearchResponse            │
-                        │  • answer (cited, grounded)       │
-                        │  • sources (case name, date)      │
-                        │  • graph_hits / vector_hits       │
-                        └──────────────────────────────────┘
-```
-
-### Ingestion Pipeline
-
-```
- .txt file  (Kaggle dataset)
-      │
-      ▼  JudgmentTXTParser
-  raw text  +  metadata
-  (case number, date, bench, parties, outcome extracted with regex)
-      │
-      ├──▶  LegalEntityExtractor  (LLM)
-      │         citations, statutes, concepts, holdings, judges
-      │              │
-      │              ▼
-      │         LegalGraphBuilder
-      │         MERGE nodes & relationships → Neo4j
-      │
-      └──▶  sliding-window chunks  (800 words, 150 overlap)
-                    │
-                    ▼  EmbeddingModel (local)
-               float32 vectors  (384-dim)
-                    │
-                    ▼  LegalVectorStore
-               ChromaDB  (persisted on disk)
-```
+The fused top-K results are passed to an LLM (Groq / Anthropic / OpenAI) which synthesises a grounded, cited legal research answer — streamed live in the chat UI.
 
 ---
 
-## Knowledge Graph Schema
+## ✨ Key Features
+
+- 🔍 **Hybrid GraphRAG** — Neo4j graph traversal + ChromaDB vector search fused via RRF
+- 🧠 **Intent-Aware Retrieval** — automatically detects if query is about a statute, judge, legal concept, or general topic
+- 💬 **Streaming Chat UI** — token-by-token streamed answers via Streamlit
+- 🎙️ **Voice Input** — speak your legal query via Groq Whisper (falls back to Google STT)
+- 👁️ **Vision / Multimodal** — attach a legal document image; analysed by Groq's vision LLM
+- 📚 **Source Transparency** — every answer shows exactly which cases were retrieved and their relevance scores
+- 🔗 **Citation Network** — cases are linked by `CITES` edges so the system understands legal precedent chains
+- 📊 **RAGAS Evaluation** — Faithfulness, Answer Relevancy, Context Recall, Context Precision measured on 40 test questions
+- ⚙️ **Multi-LLM Support** — Groq, OpenAI, Anthropic Claude, or local Ollama models
+
+---
+
+## 🗺️ System Architecture
+
+### Full Pipeline
+
+```
+╔══════════════════════════════════════════════════════════════════╗
+║                  OFFLINE — Ingestion (run once)                  ║
+║                                                                  ║
+║   .txt judgment files                                            ║
+║        │                                                         ║
+║        ▼  txt_parser.py  (regex metadata + sliding-window)       ║
+║   JudgmentMetadata + TextChunks (800 words, 150 overlap)         ║
+║        │                                                         ║
+║        ├──▶ entity_extractor.py (LLM → JSON)                     ║
+║        │         citations, statutes, concepts, holdings          ║
+║        │              ▼  graph_builder.py                         ║
+║        │         Neo4j Knowledge Graph                           ║
+║        │                                                         ║
+║        └──▶ embeddings.py (all-MiniLM-L6-v2, local, 384-dim)    ║
+║                   ▼  vector_store.py                              ║
+║             ChromaDB (cosine similarity, persisted on disk)      ║
+╚══════════════════════════════════════════════════════════════════╝
+
+╔══════════════════════════════════════════════════════════════════╗
+║                    ONLINE — Per Query                            ║
+║                                                                  ║
+║   User Input (text / voice / image)                              ║
+║        │                                                         ║
+║        ▼  hybrid_retriever.py                                    ║
+║   ┌────────────────┐     ┌──────────────────┐                    ║
+║   │  Graph Leg     │     │   Vector Leg      │                    ║
+║   │  (Neo4j)       │     │   (ChromaDB)      │                    ║
+║   │                │     │                   │                    ║
+║   │ • by_statute() │     │ embed query →     │                    ║
+║   │ • by_judge()   │     │ cosine search     │                    ║
+║   │ • by_concept() │     │                   │                    ║
+║   │ • fulltext()   │     │                   │                    ║
+║   └───────┬────────┘     └─────────┬─────────┘                    ║
+║           └───────────┬────────────┘                              ║
+║                       ▼  RRF Fusion  (score = Σ 1/(60+rank))      ║
+║                Top-K RetrievedChunks                             ║
+║                       │                                           ║
+║                       ▼  llm_chain.py                             ║
+║               LLM Answer (streamed tokens)                       ║
+║                       │                                           ║
+║                       ▼  app.py (Streamlit)                       ║
+║            Chat response + Source expander                       ║
+╚══════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 🕸️ Knowledge Graph Schema
 
 ### Nodes
 
 | Label | Key Properties |
-|-------|---------------|
-| `Case` | `case_number` (unique), `case_name`, `date`, `petitioner`, `respondent`, `subject_matter`, `outcome`, `holdings` |
-| `Judge` | `name` (unique) |
-| `Statute` | `name` (unique) — e.g. `"Section 302 IPC"`, `"Article 21 Constitution"` |
-| `LegalConcept` | `name` (unique) — e.g. `"res judicata"`, `"natural justice"` |
+|---|---|
+| `:Case` | `case_number` (unique), `case_name`, `date`, `petitioner`, `respondent`, `subject_matter`, `outcome`, `holdings`, `file_path` |
+| `:Judge` | `name` (unique) |
+| `:Statute` | `name` (unique) — e.g. `"Section 302 IPC"`, `"Article 21 Constitution of India"` |
+| `:LegalConcept` | `name` (unique) — e.g. `"res judicata"`, `"natural justice"`, `"habeas corpus"` |
 
 ### Relationships
 
-| Relationship | From → To | Meaning |
-|-------------|-----------|---------|
-| `DECIDED_BY` | Case → Judge | Judge sat on the bench |
-| `APPLIES` | Case → Statute | Case invokes this statute/article |
-| `INVOLVES` | Case → LegalConcept | Case discusses this doctrine |
-| `CITES` | Case → Case | Citation network |
+| Relationship | Direction | Meaning |
+|---|---|---|
+| `DECIDED_BY` | Case → Judge | Judge sat on the bench for this case |
+| `APPLIES` | Case → Statute | Case invokes or interprets this statute/article |
+| `INVOLVES` | Case → LegalConcept | Case discusses this legal doctrine or principle |
+| `CITES` | Case → Case | This case cites another case as precedent |
 
-### Example Graph (Cypher)
+### Example Cypher Queries
 
 ```cypher
-// Find all cases decided by Justice Chandrachud that applied Article 21
+-- Find all cases decided by Justice Chandrachud applying Article 21
 MATCH (c:Case)-[:DECIDED_BY]->(j:Judge),
       (c)-[:APPLIES]->(s:Statute)
 WHERE j.name CONTAINS "Chandrachud"
@@ -141,91 +148,130 @@ RETURN c.case_name, c.date, c.outcome
 ORDER BY c.date DESC
 LIMIT 10
 
-// Traverse citation network 2 hops from a landmark case
-MATCH (c:Case {case_number: "Civil Appeal No. 4321 of 2022"})
+-- Traverse citation network 2 hops from a landmark case
+MATCH (c:Case {case_number: "Writ Petition No. 231 of 1978"})
       -[:CITES*1..2]->(cited:Case)
 RETURN c.case_name, cited.case_name, cited.date
+
+-- Find cases related via shared statutes or concepts (1-hop neighbourhood)
+MATCH (c:Case {case_number: $cn})-[*1..2]-(related:Case)
+WHERE related.case_number <> $cn
+RETURN DISTINCT related.case_name, related.outcome
+LIMIT 10
 ```
 
 ---
 
-## Project Structure
+## 📁 Project Structure
 
 ```
-LegalGraphRAG/
+AML_Project-main/
 │
-├── README.md                      ← This file
-├── requirements.txt               ← Python dependencies
-├── .env.example                   ← Copy to .env and fill in keys
-├── config.py                      ← Central settings (loaded from .env)
+├── README.md                           ← This file
+├── requirements.txt                    ← All Python dependencies
+├── config.py                           ← Central settings (loaded from .env)
+├── .env                                ← Your API keys (never committed)
+├── .gitignore                          ← Excludes .env, chroma_db, .venv, __pycache__
 │
-├── app.py                         ← Streamlit web UI
-├── api.py                         ← FastAPI REST backend
-├── smoke_test.py                  ← End-to-end sanity check
+├── app.py                              ← Streamlit web UI (4 pages + chat)
+├── api.py                              ← FastAPI REST backend
+├── main.py                             ← Minimal entry point
+├── smoke_test.py                       ← End-to-end sanity checks
 │
 ├── src/
 │   ├── ingestion/
-│   │   ├── txt_parser.py          ← Parse .txt files → metadata + chunks
-│   │   ├── entity_extractor.py    ← LLM-based entity extraction (JSON)
-│   │   └── data_loader.py         ← Orchestrate full ingestion pipeline
+│   │   ├── data_loader.py              ← Orchestrates full ingestion pipeline
+│   │   ├── txt_parser.py               ← Regex parsing + sliding-window chunking
+│   │   └── entity_extractor.py         ← LLM-based entity extraction → JSON
 │   │
 │   ├── graph/
-│   │   ├── neo4j_client.py        ← Driver + schema + helpers
-│   │   ├── graph_builder.py       ← MERGE nodes & relationships
-│   │   └── graph_queries.py       ← All Cypher retrieval queries
+│   │   ├── neo4j_client.py             ← Singleton Neo4j driver + schema setup
+│   │   ├── graph_builder.py            ← MERGE Case/Judge/Statute/Concept nodes
+│   │   └── graph_queries.py            ← All Cypher retrieval queries
 │   │
 │   ├── vector/
-│   │   ├── embeddings.py          ← sentence-transformers (local)
-│   │   └── vector_store.py        ← ChromaDB index + query
+│   │   ├── embeddings.py               ← sentence-transformers wrapper (local)
+│   │   └── vector_store.py             ← ChromaDB index + query + stats
 │   │
 │   ├── retrieval/
-│   │   └── hybrid_retriever.py    ← RRF fusion of graph + vector results
+│   │   └── hybrid_retriever.py         ← Intent detection + RRF fusion
 │   │
-│   └── generation/
-│       └── llm_chain.py           ← RAG prompt + LLM call + response model
+│   ├── generation/
+│   │   ├── llm_chain.py                ← RAG prompt + LLM call (stream + batch)
+│   │   └── stt.py                      ← Speech-to-text (Groq Whisper + Google fallback)
+│   │
+│   └── evaluation/
+│       ├── generate_eval_data.py       ← Generate Q&A pairs from judgments
+│       ├── run_ragas_eval.py           ← RAGAS evaluation runner (40 questions)
+│       ├── retry_failed_evals.py       ← Retry NaN entries with extra API keys
+│       ├── cleanup.py                  ← Clean and filter raw eval results
+│       ├── eval_queries_final_2020.csv ← Test question set
+│       └── test_metrics_40_samples.csv ← Final RAGAS metric scores
 │
 └── data/
-    └── judgments/                 ← Drop .txt files here
+    └── judgements/                     ← Raw .txt judgment files (200+ cases)
 ```
 
 ---
 
-## Requirements
+## 🛠️ Tech Stack
 
-### Python
+| Component | Technology |
+|---|---|
+| **Knowledge Graph** | [Neo4j AuraDB](https://neo4j.com/cloud/aura/) |
+| **Vector Store** | [ChromaDB](https://www.trychroma.com/) (local, persisted) |
+| **Embeddings** | [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) — 384-dim, runs locally |
+| **Primary LLM** | [Groq](https://groq.com/) — `llama-3.1-8b-instant` |
+| **Vision LLM** | [Groq](https://groq.com/) — `llama-3.2-11b-vision-preview` |
+| **STT** | [Groq Whisper](https://groq.com/) (`whisper-large-v3`) + Google STT fallback |
+| **Alt LLMs** | Anthropic Claude, OpenAI GPT, Ollama (local) |
+| **Web UI** | [Streamlit](https://streamlit.io/) |
+| **REST API** | [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn |
+| **Evaluation** | [RAGAS](https://docs.ragas.io/) + OpenRouter + HuggingFace Embeddings |
+| **Dataset** | [Kaggle: vxrunsonii/supreme-court-judgments-txt](https://www.kaggle.com/datasets/vxrunsonii/supreme-court-judgments-txt) |
+| **Language** | Python 3.10+ |
+
+---
+
+## 📦 Requirements
+
+### Python Version
+
 Python **3.10 or later** is required.
 
 ### External Services
 
 | Service | Purpose | Cost |
-|---------|---------|------|
+|---|---|---|
 | **Neo4j AuraDB** | Knowledge graph database | Free tier available |
-| **Groq** | LLM inference (recommended) | Free tier available |
+| **Groq** | LLM inference + Whisper STT + Vision | Free tier available |
 | Anthropic Claude | Alternative LLM | Paid |
-| OpenAI GPT | Alternative LLM | Paid |
+| OpenAI GPT | Alternative LLM / Evaluation judge | Paid |
+| OpenRouter | LLM routing for RAGAS evaluation | Free credits available |
 
-> Sentence-transformer embeddings run **entirely locally** — no API key needed.
+> ✅ Sentence-transformer embeddings run **entirely locally** — no API key required.
 
 ---
 
-## Setup & Installation
+## ⚙️ Setup & Installation
 
-### Step 1 — Clone / unzip the project
+### Step 1 — Clone the repository
 
 ```bash
-cd LegalGraphRAG
+git clone https://github.com/Sowmya0667/AML_Project.git
+cd AML_Project
 ```
 
 ### Step 2 — Create a virtual environment
 
 ```bash
-python -m venv venv
+python -m venv .venv
 
 # macOS / Linux
-source venv/bin/activate
+source .venv/bin/activate
 
 # Windows
-venv\Scripts\activate
+.venv\Scripts\activate
 ```
 
 ### Step 3 — Install dependencies
@@ -234,93 +280,121 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-> First run downloads the `all-MiniLM-L6-v2` model (~22 MB). This happens
-> automatically from HuggingFace.
+> First run will automatically download the `all-MiniLM-L6-v2` model (~22 MB) from HuggingFace.
 
-### Step 4 — Create a free Neo4j AuraDB instance
+### Step 4 — Set up Neo4j AuraDB (Free)
 
 1. Go to [neo4j.com/cloud/aura](https://neo4j.com/cloud/aura/) and sign up
 2. Click **New Instance → AuraDB Free**
-3. Save the **URI**, **username**, and **password** shown after creation
-4. Wait ~2 minutes for the instance to start
+3. Save the **Connection URI**, **Username**, and **Password** shown after creation
+4. Wait ~2 minutes for the instance to become active
 
-### Step 5 — Get a free Groq API key
+### Step 5 — Get a Groq API Key (Free)
 
 1. Go to [console.groq.com](https://console.groq.com) and sign up
-2. Create an API key
+2. Navigate to **API Keys** → **Create API Key**
+3. Copy the key starting with `gsk_...`
 
 ### Step 6 — Configure `.env`
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env`:
+Create a `.env` file in the project root:
 
 ```env
+# Neo4j (required)
 NEO4J_URI=neo4j+s://xxxxxxxx.databases.neo4j.io
 NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=your_password
+NEO4J_PASSWORD=your_aura_password
 
+# LLM — choose one provider
 LLM_PROVIDER=groq
-LLM_MODEL=llama3-8b-8192
+LLM_MODEL=llama-3.1-8b-instant
 GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxx
+
+# Optional alternative LLMs
+# LLM_PROVIDER=openai
+# LLM_MODEL=gpt-4o-mini
+# OPENAI_API_KEY=sk-...
+
+# LLM_PROVIDER=anthropic
+# LLM_MODEL=claude-3-haiku-20240307
+# ANTHROPIC_API_KEY=sk-ant-...
+
+# Embeddings (default, runs locally — no key needed)
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+
+# Paths (defaults are fine)
+JUDGMENTS_DATA_DIR=./data/judgements
+CHROMA_PERSIST_DIR=./chroma_db
+CHROMA_COLLECTION=legal_judgments
+
+# Chunking
+CHUNK_SIZE=800
+CHUNK_OVERLAP=150
+
+# Retrieval
+GRAPH_TOP_K=5
+VECTOR_TOP_K=5
+FINAL_TOP_K=6
+
+# For RAGAS evaluation (optional)
+OPENROUTER_API_KEY_1=sk-or-v1-...
+OPENROUTER_API_KEY_2=sk-or-v1-...
 ```
 
-### Step 7 — Verify the setup
+### Step 7 — Verify Setup
 
 ```bash
 python smoke_test.py
 ```
 
-All four tests should show ✅ (or ⚠️ skipped for services not yet configured).
+All tests should show ✅. A ⚠️ means a service is not yet configured (non-fatal).
 
 ---
 
-## Data — Kaggle Dataset
+## 📂 Data — Kaggle Dataset
 
 This project uses:
 **[LEGAL-Text-Supreme Court Judgments (India)](https://www.kaggle.com/datasets/vxrunsonii/supreme-court-judgments-txt)**
 
-Plain-text `.txt` files of Indian Supreme Court judgments. No PDF parsing needed.
+Plain-text `.txt` files of Indian Supreme Court judgments — no PDF parsing needed.
 
-### Download (Kaggle CLI — fastest)
+### Download via Kaggle CLI (fastest)
 
 ```bash
 pip install kaggle
 
-# Place your kaggle.json token at ~/.kaggle/kaggle.json
-# Get it from: kaggle.com → Account → Settings → API → Create New Token
+# Place your kaggle.json at ~/.kaggle/kaggle.json
+# Get it: kaggle.com → Account → Settings → API → Create New Token
 
 kaggle datasets download -d vxrunsonii/supreme-court-judgments-txt
-unzip supreme-court-judgments-txt.zip -d ./data/judgments/
+unzip supreme-court-judgments-txt.zip -d ./data/judgements/
 ```
 
-### Download (browser)
+### Download via Browser
 
 1. Visit the dataset page and click **Download**
 2. Extract the `.zip`
-3. Move all `.txt` files into `./data/judgments/`
+3. Move all `.txt` files into `./data/judgements/`
 
 ---
 
-## Running the System
+## 🚀 Running the System
 
-### 1 — Ingest judgment files
+### 1 — Ingest Judgment Files (Offline, one-time)
 
 ```bash
-python -m src.ingestion.data_loader --input ./data/judgments/
+python -m src.ingestion.data_loader --input ./data/judgements/
 ```
 
 This will:
-- Parse every `.txt` file (extract metadata with regex)
-- Call the LLM to extract citations, statutes, legal concepts, holdings
-- Build the Neo4j knowledge graph (Case, Judge, Statute, LegalConcept nodes)
-- Embed all text chunks and store them in ChromaDB
+- Parse every `.txt` file (regex metadata extraction)
+- Call the LLM to extract citations, statutes, legal concepts, judges, holdings
+- Build the **Neo4j knowledge graph** (Case, Judge, Statute, LegalConcept nodes + relationships)
+- **Embed** all text chunks and store them in **ChromaDB**
 
-Progress is shown with a `tqdm` progress bar.
+Progress is shown with a `tqdm` progress bar. Failed files are logged but don't crash the run.
 
-### 2 — Launch the Streamlit UI
+### 2 — Launch the Streamlit Chat UI
 
 ```bash
 streamlit run app.py
@@ -328,97 +402,137 @@ streamlit run app.py
 
 Open **http://localhost:8501** in your browser.
 
-**UI features:**
-- 🔍 Natural language legal research query
-- 📂 Upload `.txt` files directly from the sidebar
-- 📊 Live graph stats (cases, judges, statutes, concepts, chunks)
-- 📝 Streamed LLM answer with citations
-- 📚 Retrieved sources with graph/vector/hybrid badge
-- 🔗 Example Cypher queries shown for each search
+**UI Pages:**
+| Page | Description |
+|---|---|
+| 🏠 Home | Landing page with project introduction |
+| ℹ️ About Vidhi | Explains the 4 pillars: Graph, Semantic, Hybrid Fusion, Vision |
+| 📖 How to Use | Step-by-step usage guide |
+| 💬 The Chatbot | Main chat interface with streaming answers |
 
-### 3 — Launch the REST API (optional)
+**Chatbot Features:**
+- 💬 Type a legal research query in the chat box
+- 🎙️ Click the **microphone** (bottom right) to speak your query via voice
+- 📎 Click the **paperclip** to attach an image of a legal document for visual analysis
+- 📊 Click **Refresh** in the sidebar to see live graph stats (Cases, Judges, Statutes, Concepts, Chunks)
+- ⚙️ Adjust **Graph Top-K**, **Vector Top-K**, **Final Top-K** sliders in the sidebar
+- 📚 Expand **View Retrieved Sources** to see which cases were retrieved and their relevance scores
+
+### 3 — Launch the REST API (Optional)
 
 ```bash
 uvicorn api:app --reload --port 8000
 ```
 
-Interactive docs: **http://localhost:8000/docs**
+Interactive API docs: **http://localhost:8000/docs**
 
 ---
 
-## How It Works
+## 🔬 How It Works
 
-### Hybrid Retrieval in Detail
+### Stage 1 — Parsing (`txt_parser.py`)
 
-When a query arrives, the system detects its **intent** using lightweight regex:
+Each `.txt` file is parsed with **regex patterns** to extract:
 
-| Pattern detected | Graph strategy |
-|-----------------|---------------|
-| `Section 302`, `Article 21`, `IPC`, `CrPC` | `by_statute()` |
-| `Justice Chandrachud`, `Justice Bhat` | `by_judge()` |
-| `res judicata`, `natural justice`, `habeas corpus` | `by_concept()` |
-| Any query | `fulltext()` index on Neo4j + semantic vector search |
+| Field | Strategy |
+|---|---|
+| `case_number` | Matches "Civil Appeal No. 1234 of 2020", "SLP", "Writ Petition", etc. |
+| `date` | Matches "Decided on 15 January 2020", "Judgment dated..." |
+| `bench` | Matches "CORAM:", "Before J." patterns |
+| `case_name` | Scans first 40 lines for "Party A vs Party B" |
+| `outcome` | Scans last 3000 characters for "appeal allowed/dismissed", "partly allowed", etc. |
 
-Results from both legs are merged using **Reciprocal Rank Fusion**:
-
-```
-RRF score = Σ  1 / (60 + rank_i)
-```
-
-This gives higher scores to items that rank well in *both* retrieval methods,
-without requiring score normalisation.
-
-### Entity Extraction
-
-For each new judgment, the LLM is prompted to return a structured JSON object:
-
-```json
-{
-  "citations":      ["Hussainara Khatoon v. State of Bihar (1979)"],
-  "statutes":       ["Article 21 Constitution", "Section 437 CrPC"],
-  "legal_concepts": ["right to speedy trial", "natural justice"],
-  "holdings":       ["Appeal allowed. Detention was unconstitutional."],
-  "judges":         ["Justice D.Y. Chandrachud"],
-  "subject_matter": "Constitutional Law",
-  "outcome":        "Allowed"
-}
-```
-
-This JSON is used to create graph nodes and relationships in Neo4j. Extraction
-runs only once per file (on the first 3500 characters to control API cost).
-
-### Chunking Strategy
-
-Each judgment is split into overlapping word-level windows:
+The text is then split into **overlapping 800-word chunks** (150-word overlap, step = 650):
 
 ```
-chunk_size    = 800 words
-chunk_overlap = 150 words
-step          = 650 words
-
 Window 1: words[0:800]
 Window 2: words[650:1450]
 Window 3: words[1300:2100]
 ...
 ```
 
-Overlap ensures that context spanning a chunk boundary is not lost.
+Overlap ensures context spanning a chunk boundary is never lost.
 
 ---
 
-## API Reference
+### Stage 2 — Entity Extraction (`entity_extractor.py`)
+
+The LLM is prompted on the first 3,500 characters of each judgment to return structured JSON:
+
+```json
+{
+  "citations":      ["Hussainara Khatoon v. State of Bihar (1979)"],
+  "statutes":       ["Article 21 Constitution of India", "Section 437 CrPC"],
+  "legal_concepts": ["right to speedy trial", "natural justice"],
+  "holdings":       ["Detention beyond reasonable time violates Article 21."],
+  "judges":         ["Justice P.N. Bhagwati"],
+  "subject_matter": "Constitutional Law",
+  "outcome":        "Allowed"
+}
+```
+
+This populates the Neo4j graph. All writes use `MERGE` (upsert) — safe to re-run.
+
+---
+
+### Stage 3 — Hybrid Retrieval (`hybrid_retriever.py`)
+
+**Intent Detection** (regex-based):
+
+| Pattern | Graph Strategy |
+|---|---|
+| `Section 302`, `Article 21`, `IPC`, `CrPC`, `Act 2024` | `by_statute()` |
+| `Justice Chandrachud`, `Justice Bhat` | `by_judge()` |
+| `res judicata`, `natural justice`, `habeas corpus` | `by_concept()` |
+| Any query (always runs) | `fulltext()` Neo4j index + ChromaDB semantic search |
+
+**Reciprocal Rank Fusion (RRF):**
+
+```
+RRF score(item) = Σ  1 / (60 + rank_in_list)
+                 for each retrieval list the item appears in
+```
+
+Items ranking highly in **both** graph and vector results get the highest combined scores. Deduplication is done by `hash(chunk.text)` — not `case_number` — so multiple relevant paragraphs from the same case can all appear.
+
+---
+
+### Stage 4 — LLM Generation (`llm_chain.py`)
+
+The formatted context + user query are injected into the RAG prompt template and sent to the LLM with a system prompt instructing it to:
+
+- Answer only from the provided context
+- Cite specific case numbers and names  
+- Distinguish *ratio decidendi* from *obiter dicta*
+- Reject off-topic queries with a guardrail response
+- Support **streaming** (token-by-token) and **batch** modes
+
+**Vision routing:** If an image is attached, the call is automatically routed to Groq's `llama-3.2-11b-vision-preview` model with the image as a base64-encoded `image_url`.
+
+---
+
+### Stage 5 — Voice Input (`stt.py`)
+
+Speech is captured via the `audio_recorder_streamlit` widget and transcribed in two tiers:
+
+1. **Groq Whisper API** (`whisper-large-v3`) — primary, fast and accurate
+2. **Google Web Speech API** — free fallback via `SpeechRecognition` library
+
+---
+
+## 📡 API Reference
 
 | Method | Endpoint | Description |
-|--------|---------|-------------|
+|---|---|---|
 | `GET` | `/health` | Health check |
-| `POST` | `/query` | Full RAG query (retrieve + generate) |
-| `POST` | `/query/stream` | Streaming SSE response |
-| `POST` | `/retrieve` | Retrieve chunks without generation |
-| `POST` | `/ingest/text` | Ingest raw text judgment |
-| `GET` | `/graph/stats` | Node count statistics |
-| `GET` | `/graph/case/{id}` | Case detail + citations |
-| `POST` | `/graph/search` | Direct graph search |
-| `GET` | `/vector/stats` | Vector store statistics |
+| `POST` | `/query` | Full RAG pipeline: retrieve + generate |
+| `POST` | `/query/stream` | Streaming SSE response (token-by-token) |
+| `POST` | `/retrieve` | Return retrieved chunks without LLM generation |
+| `POST` | `/ingest/text` | Ingest a judgment provided as raw text (async background task) |
+| `GET` | `/graph/stats` | Count of Cases, Judges, Statutes, Concepts in Neo4j |
+| `GET` | `/graph/case/{case_number}` | Case detail: cites, cited_by, related cases |
+| `POST` | `/graph/search` | Targeted graph search (statute/judge/concept/fulltext) |
+| `GET` | `/vector/stats` | ChromaDB chunk count + list of indexed cases |
 
 ### Example: POST /query
 
@@ -433,67 +547,99 @@ curl -X POST http://localhost:8000/query \
   }'
 ```
 
-Response:
+**Response:**
 ```json
 {
-  "query": "What is the law on right to speedy trial ...",
-  "answer": "The right to speedy trial is a fundamental right under Article 21 ...",
+  "query": "What is the law on right to speedy trial under Article 21?",
+  "answer": "The right to speedy trial is an implicit fundamental right under Article 21...",
   "sources": [
-    {"case_number": "...", "case_name": "Hussainara Khatoon ...", "source": "graph", "score": 0.91}
+    {
+      "case_number": "Writ Petition No. 57 of 1979",
+      "case_name": "Hussainara Khatoon vs State of Bihar",
+      "date": "9 March 1979",
+      "source": "hybrid",
+      "score": 0.923
+    }
   ],
   "graph_hits": 3,
   "vector_hits": 5,
-  "model_used": "llama3-8b-8192"
+  "model_used": "llama-3.1-8b-instant"
 }
 ```
 
 ---
 
-## Example Queries
+## 📊 Evaluation (RAGAS)
+
+The system is evaluated using the **RAGAS** framework on 40 hand-crafted test questions about 2020 Indian Supreme Court judgments.
+
+### Metrics
+
+| Metric | What It Measures |
+|---|---|
+| **Faithfulness** | Is the answer factually grounded in retrieved context? (no hallucination) |
+| **Answer Relevancy** | Does the answer actually address the question? |
+| **Context Recall** | Did retrieval find all relevant information vs. ground truth? |
+| **Context Precision** | Are retrieved chunks actually relevant? (signal-to-noise ratio) |
+
+### Running the Evaluation
+
+```bash
+# Generate evaluation Q&A pairs from judgments
+python src/evaluation/generate_eval_data.py
+
+# Run RAGAS evaluation (uses OpenRouter API keys from .env)
+python src/evaluation/run_ragas_eval.py
+
+# Retry any NaN entries with additional API keys
+python src/evaluation/retry_failed_evals.py
+```
+
+Results are saved to `src/evaluation/test_metrics_40_samples.csv`.
+
+---
+
+## 💬 Example Queries
 
 ```
-# Constitutional law
+# Constitutional Law
 "What are the landmark judgments on Article 21 right to life and personal liberty?"
 "How has the Supreme Court interpreted the right to privacy?"
-"What is the basic structure doctrine established in Kesavananda Bharati?"
+"What is the basic structure doctrine from Kesavananda Bharati?"
 
-# Criminal law
+# Criminal Law
 "What is the test for awarding death penalty under Section 302 IPC?"
 "Cases on bail under Section 437 and 438 CrPC"
 "What is anticipatory bail and when can it be refused?"
 
-# Legal doctrines
+# Legal Doctrines
 "Explain the doctrine of res judicata as applied by the Supreme Court"
 "Cases on natural justice and the audi alteram partem principle"
 "What is promissory estoppel in Indian contract law?"
 
-# Judge-specific
+# Judge-Specific
 "Important judgments delivered by Justice D.Y. Chandrachud"
 "Cases decided by Justice Indu Malhotra on gender equality"
 
-# Citation network
+# Citation Network
 "Which cases have cited Maneka Gandhi v. Union of India?"
+"Cases related to Hussainara Khatoon on the right to speedy trial"
+
+# Voice / Vision Input
+(click the 🎙️ microphone and speak)
+(click the 📎 paperclip and attach an image of a legal notice)
 ```
 
 ---
 
-## Tech Stack
+## 📄 License
 
-| Component | Technology |
-|-----------|-----------|
-| Knowledge Graph | [Neo4j AuraDB](https://neo4j.com/cloud/aura/) |
-| Vector Store | [ChromaDB](https://www.trychroma.com/) (local) |
-| Embeddings | [sentence-transformers/all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) |
-| LLM | [Groq](https://groq.com/) / Anthropic / OpenAI |
-| Web UI | [Streamlit](https://streamlit.io/) |
-| REST API | [FastAPI](https://fastapi.tiangolo.com/) |
-| Dataset | [Kaggle: vxrunsonii/supreme-court-judgments-txt](https://www.kaggle.com/datasets/vxrunsonii/supreme-court-judgments-txt) |
-| Language | Python 3.10+ |
+This project is built for **educational and research purposes** as part of an Academic Machine Learning project.
+
+The Kaggle dataset ([vxrunsonii/supreme-court-judgments-txt](https://www.kaggle.com/datasets/vxrunsonii/supreme-court-judgments-txt)) is subject to its own license — please review before any commercial use.
 
 ---
 
-## License
-
-This project is for educational and research purposes.
-The Kaggle dataset is subject to its own license — check the dataset page before
-commercial use.
+<p align="center">
+  Built with ❤️ for Indian Legal Research
+</p>
