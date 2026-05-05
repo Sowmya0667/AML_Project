@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.env
+
+# Virtual environments
+.venv/
+chroma_db/
+*.sqlite3
+chroma_db_corrupted/
+scratch_test.py
+chunks.txt
+test_out.txt
